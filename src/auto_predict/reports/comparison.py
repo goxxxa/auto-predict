@@ -8,10 +8,10 @@ import pandas as pd
 import torch
 from matplotlib.figure import Figure
 
-from auto_predict.anfis import ANFIS
 from auto_predict.evaluation import FEATURES, TARGET, split_holdout
 from auto_predict.inference import load_model, membership_parameters, standardize_features
-from auto_predict.reporting import plot_model_comparison
+from auto_predict.models.anfis import ANFIS
+from auto_predict.reports.plots import plot_model_comparison
 
 
 def _plot_memberships(

@@ -1,4 +1,4 @@
-"""Train and evaluate classical price models."""
+"""Train and evaluate classical price models on temporal folds."""
 
 import pandas as pd
 from sklearn.dummy import DummyRegressor

@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from auto_predict.baselines import evaluate_baselines
 from auto_predict.evaluation import FEATURES, TARGET, split_holdout
-from auto_predict.reporting import plot_fold_errors, plot_test_predictions
+from auto_predict.experiments.baselines import evaluate_baselines
+from auto_predict.reports.plots import plot_fold_errors, plot_test_predictions
 
 
 def main() -> None:

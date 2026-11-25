@@ -3,7 +3,7 @@
 import torch
 from torch import Tensor
 
-from auto_predict.anfis import ANFIS, CONSEQUENT_PENALTY
+from auto_predict.models.anfis import ANFIS, CONSEQUENT_PENALTY
 
 
 def _fitness(

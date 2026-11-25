@@ -5,8 +5,8 @@ from pathlib import Path
 
 import torch
 
-from auto_predict.anfis import ANFIS, MIN_MEMBERSHIP_WIDTH
 from auto_predict.evaluation import FEATURES
+from auto_predict.models.anfis import ANFIS, MIN_MEMBERSHIP_WIDTH
 
 
 def load_model(path: Path) -> tuple[ANFIS, dict]:

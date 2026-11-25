@@ -4,7 +4,7 @@ import argparse
 from datetime import date
 from pathlib import Path
 
-from auto_predict.anfis_experiment import run_experiment
+from auto_predict.experiments.anfis import run_experiment
 
 
 def main() -> None:

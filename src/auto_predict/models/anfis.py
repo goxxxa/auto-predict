@@ -1,4 +1,4 @@
-"""First-order Sugeno ANFIS with hybrid training."""
+"""First-order Sugeno ANFIS and its hybrid training procedure."""
 
 from itertools import product
 from math import sqrt

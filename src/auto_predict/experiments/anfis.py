@@ -10,7 +10,6 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-from auto_predict.anfis import ANFIS, train_anfis
 from auto_predict.evaluation import (
     FEATURES,
     TARGET,
@@ -18,7 +17,8 @@ from auto_predict.evaluation import (
     split_holdout,
     temporal_folds,
 )
-from auto_predict.reporting import plot_learning_curves, plot_test_predictions
+from auto_predict.models.anfis import ANFIS, train_anfis
+from auto_predict.reports.plots import plot_learning_curves, plot_test_predictions
 
 
 PRICE_SCALE = 1_000_000

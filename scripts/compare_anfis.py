@@ -4,7 +4,7 @@ import argparse
 from datetime import date
 from pathlib import Path
 
-from auto_predict.anfis_report import write_comparison
+from auto_predict.reports.comparison import write_comparison
 
 
 def main() -> None:

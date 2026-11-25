@@ -8,14 +8,6 @@ import pandas as pd
 import torch
 from sklearn.pipeline import Pipeline
 
-from auto_predict.anfis import ANFIS
-from auto_predict.anfis_experiment import (
-    PRICE_SCALE,
-    fit_preprocessor,
-    listing_tensors,
-    save_checkpoint,
-)
-from auto_predict.anfis_genetic import search_memberships
 from auto_predict.evaluation import (
     FEATURES,
     TARGET,
@@ -23,7 +15,15 @@ from auto_predict.evaluation import (
     split_holdout,
     temporal_folds,
 )
-from auto_predict.reporting import plot_genetic_validation, plot_test_predictions
+from auto_predict.experiments.anfis import (
+    PRICE_SCALE,
+    fit_preprocessor,
+    listing_tensors,
+    save_checkpoint,
+)
+from auto_predict.models.anfis import ANFIS
+from auto_predict.models.anfis_genetic import search_memberships
+from auto_predict.reports.plots import plot_genetic_validation, plot_test_predictions
 
 
 SEEDS = (17, 42, 79)

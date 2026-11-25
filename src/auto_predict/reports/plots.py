@@ -1,4 +1,4 @@
-"""Plots for comparing model errors across time periods."""
+"""Plots of model training, validation errors, and test predictions."""
 
 from pathlib import Path
 
