@@ -4,3 +4,4 @@ __pycache__/
 *.egg-info/
 /data/
 /Отчёт_ANFIS.docx
+/~$*.docx
