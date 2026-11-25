@@ -24,16 +24,17 @@ from auto_predict.reports.plots import plot_learning_curves, plot_test_predictio
 PRICE_SCALE = 1_000_000
 
 
-def fit_preprocessor(listings: pd.DataFrame) -> Pipeline:
+def fit_preprocessor(listings: pd.DataFrame, feature_names: list[str] | None = None) -> Pipeline:
+    columns = FEATURES if feature_names is None else feature_names
     return make_pipeline(
         SimpleImputer(strategy="median", keep_empty_features=True), StandardScaler()
-    ).fit(listings[FEATURES])
+    ).fit(listings[columns])
 
 
 def listing_tensors(
     listings: pd.DataFrame, preprocessor: Pipeline, device: torch.device
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    features = preprocessor.transform(listings[FEATURES])
+    features = preprocessor.transform(listings[list(preprocessor.feature_names_in_)])
     target = listings[TARGET].to_numpy() / PRICE_SCALE
     return (
         torch.as_tensor(features, dtype=torch.float32, device=device),
@@ -41,13 +42,18 @@ def listing_tensors(
     )
 
 
-def save_checkpoint(model: ANFIS, preprocessor: Pipeline, output: Path) -> None:
+def save_checkpoint(
+    model: ANFIS, preprocessor: Pipeline, output: Path, *,
+    log_target: bool = False, feature_encoding: dict | None = None,
+) -> None:
     imputer = preprocessor.named_steps["simpleimputer"]
     scaler = preprocessor.named_steps["standardscaler"]
     torch.save(
         {
-            "features": FEATURES,
+            "features": [str(column) for column in preprocessor.feature_names_in_],
             "price_scale": PRICE_SCALE,
+            "log_target": log_target,
+            "feature_encoding": feature_encoding or {},
             "feature_medians": torch.from_numpy(imputer.statistics_),
             "feature_means": torch.from_numpy(scaler.mean_),
             "feature_scales": torch.from_numpy(scaler.scale_),

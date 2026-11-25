@@ -13,6 +13,8 @@ from sklearn.model_selection import TimeSeriesSplit
 
 
 FEATURES = ["age_years", "mileage_km", "power_hp"]
+TRANSMISSION_FEATURE = "automatic"
+GENERATION_FEATURE = "generation"
 TARGET = "price_rub"
 
 
@@ -45,6 +47,25 @@ def temporal_folds(
         train = development.loc[days.isin(unique_days[train_indices])]
         validation = development.loc[days.isin(unique_days[validation_indices])]
         yield train, validation
+
+
+def training_window(listings: pd.DataFrame, months: int) -> pd.DataFrame:
+    """Keep the last calendar months of training data, or all dates for zero."""
+    if months < 0:
+        raise ValueError("The training window must be nonnegative.")
+    if months == 0:
+        return listings
+    end = listings["listed_at"].max() + pd.Timedelta(days=1)
+    start = end - pd.DateOffset(months=months)
+    return listings.loc[listings["listed_at"].ge(start)]
+
+
+def training_window_days(listings: pd.DataFrame, days: int) -> pd.DataFrame:
+    """Keep records within the last specified number of calendar days."""
+    if days <= 0:
+        raise ValueError("The number of training days must be positive.")
+    start = listings["listed_at"].max() - pd.Timedelta(days=days - 1)
+    return listings.loc[listings["listed_at"].ge(start)]
 
 
 def regression_metrics(actual, predicted) -> dict[str, float]:

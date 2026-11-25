@@ -16,6 +16,16 @@ DROM_COLUMN_NAMES = {
     "Мощность": "power_hp",
 }
 
+DROM_VEHICLE_COLUMNS = {
+    "Объем двигателя": "engine_liters",
+    "Коробка передач": "transmission",
+    "Поколение": "generation",
+    "Рестайлинг": "facelift",
+    "Тип кузова": "body_type",
+    "Регион": "region",
+    "Макро-регион": "macro_region",
+}
+
 
 def prepare_sample(
     source: Path,
@@ -23,18 +33,24 @@ def prepare_sample(
     start_year: int,
     end_year: int,
     chunk_size: int,
+    *,
+    include_vehicle_details: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Return cleaned listings and a quality report for the requested years."""
     model = " ".join(model.split()).casefold()
     if not model or not 1886 <= start_year <= end_year <= 9999 or chunk_size <= 0:
         raise ValueError("Specify a model, a valid year range, and a positive chunk size.")
 
+    columns = DROM_COLUMN_NAMES
+    if include_vehicle_details:
+        columns = columns | DROM_VEHICLE_COLUMNS
+
     selected = []
     with pd.read_csv(
-        source, usecols=list(DROM_COLUMN_NAMES), dtype="string", chunksize=chunk_size
+        source, usecols=list(columns), dtype="string", chunksize=chunk_size
     ) as chunks:
         for chunk in chunks:
-            chunk = chunk.rename(columns=DROM_COLUMN_NAMES)
+            chunk = chunk.rename(columns=columns)
             names = chunk["model"].str.split().str.join(" ").str.casefold()
             segment = chunk.loc[names.eq(model)].copy()
             dates = pd.to_datetime(segment["listed_at"], format="mixed", errors="coerce")
@@ -53,7 +69,10 @@ def prepare_sample(
     sample = sample.loc[~(has_url & sample["listing_url"].duplicated())].copy()
     years = sample["listed_at"].dt.year
 
-    for column in ("model_year", "price_rub", "mileage_km", "power_hp"):
+    numeric_columns = ["model_year", "price_rub", "mileage_km", "power_hp"]
+    if include_vehicle_details:
+        numeric_columns.extend(["engine_liters", "generation", "facelift"])
+    for column in numeric_columns:
         values = pd.to_numeric(sample[column], errors="coerce")
         sample[column] = values.where(np.isfinite(values))
 

@@ -8,7 +8,13 @@ from sklearn.linear_model import Ridge
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-from auto_predict.evaluation import FEATURES, TARGET, regression_metrics, temporal_folds
+from auto_predict.evaluation import (
+    FEATURES,
+    TARGET,
+    regression_metrics,
+    temporal_folds,
+    training_window,
+)
 
 
 def fit_baselines(train: pd.DataFrame) -> dict[str, Pipeline]:
@@ -30,18 +36,20 @@ def fit_baselines(train: pd.DataFrame) -> dict[str, Pipeline]:
 
 
 def evaluate_baselines(
-    development: pd.DataFrame, test: pd.DataFrame, n_splits: int
+    development: pd.DataFrame, test: pd.DataFrame, n_splits: int, lookback_months: int = 0
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Score each fold, then refit on pre-test data and predict the holdout."""
     results = []
     for fold, (train, validation) in enumerate(temporal_folds(development, n_splits), 1):
+        train = training_window(train, lookback_months)
         for name, model in fit_baselines(train).items():
             for split, subset in (("train", train), ("validation", validation)):
                 predictions = model.predict(subset[FEATURES])
                 results.append(_score(name, split, fold, subset, predictions))
 
     test_predictions = test[[TARGET]].copy()
-    for name, model in fit_baselines(development).items():
+    final_train = training_window(development, lookback_months)
+    for name, model in fit_baselines(final_train).items():
         predictions = model.predict(test[FEATURES])
         test_predictions[name] = predictions
         results.append(_score(name, "test", None, test, predictions))

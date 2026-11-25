@@ -106,12 +106,84 @@ uv run --extra gpu python scripts/compare_anfis.py data/processed/listings.csv
 сохраняются в `data/processed/anfis_comparison`. Время в отчёте ANFIS
 включает кросс-валидацию и финальное обучение на одном GPU.
 
+## Обучение ANFIS на недавних объявлениях
+
+```powershell
+uv run --extra gpu python scripts/train_anfis_genetic.py data/processed/listings.csv --lookback-months 0 2 3 6 9 12 18
+uv run python scripts/evaluate_baselines.py data/processed/listings.csv --lookback-months 2
+```
+
+На тех же пяти фолдах сравнивается вся доступная история (`0`) и окна от
+2 до 18 месяцев перед валидацией. Побеждает окно с наименьшим средним MAE
+валидации. Для теста 2025 года модель обучается на выбранном окне перед
+началом тестового периода.
+
+Наилучший результат дало окно в два месяца. Финальная модель использовала
+3 065 объявлений ноября и декабря 2024 года. Тестовый MAE снизился с
+197 267 до 130 310 ₽, а MAE на пяти фолдах — с 208 430 до 133 691 ₽.
+Метрики, выбор окна, графики и веса сохранены в
+`data/processed/anfis_genetic_recent`.
+
+На том же двухмесячном окне Gradient Boosting получил тестовый MAE
+126 791 ₽, а Random Forest — 134 827 ₽. Метрики классических моделей
+сохранены в `data/processed/baselines_recent.csv`.
+
+## Расширенный подбор гиперпараметров
+
+Все параметры подбираются по среднему MAE на пяти временных фолдах
+до 2025 года. Тест 2025 года используется как исторический бенчмарк,
+который уже применялся в предыдущих экспериментах.
+
+```powershell
+uv run python scripts/prepare_data.py data/raw/drom_archive_2007-2025_full_27-07-2025.csv --vehicle-details
+uv run --extra gpu python scripts/tune_anfis.py data/processed/listings.csv
+uv run --extra gpu python scripts/tune_anfis.py data/processed/extended/listings.csv --refine-from data/processed/tuning/anfis/validation_trials.csv --output-dir data/processed/tuning/anfis_extended
+uv run --extra gpu python scripts/tune_anfis.py data/processed/extended/listings.csv --refine-from data/processed/tuning/anfis_extended/validation_trials.csv --add-generation --output-dir data/processed/tuning/anfis_vehicle
+uv run python scripts/tune_trees.py data/processed/extended/listings.csv
+uv run python scripts/tune_trees.py data/processed/extended/listings.csv --refine-from data/processed/tuning/trees/validation_trials.csv --output-dir data/processed/tuning/trees_refined
+uv run --extra boost python scripts/tune_trees.py data/processed/extended/listings.csv --catboost --output-dir data/processed/tuning/catboost
+uv run --extra boost python scripts/tune_trees.py data/processed/extended/listings.csv --catboost --refine-from data/processed/tuning/catboost/validation_trials.csv --output-dir data/processed/tuning/catboost_refined
+uv run --extra gpu --extra boost python scripts/evaluate_tuned_blend.py data/processed/extended/listings.csv
+```
+
+В ANFIS проверены окна в календарных днях, регуляризация линейных выводов,
+логарифм цены, затухание веса давних объявлений, мутации, размеры популяции
+и число правил. Отдельно проверены представление возраста, логарифм пробега,
+коробка передач и поколение автомобиля. Выбранная ANFIS использует год
+выпуска, логарифмический пробег, мощность, АКПП и поколение, всего 32
+правила. Она обучена на последних 90 днях с периодом полураспада веса
+10 дней, штрафом 0,00003, популяцией из 20 кандидатов и 35 поколениями.
+Её MAE составил 114 795 ₽ на валидации и 120 434 ₽ на тесте.
+
+Для деревьев проверены глубина, длина окна, размер листа, регуляризация,
+скорость и число итераций, функция потерь, признаки региона и автомобиля,
+веса по давности и поправка по недавним остаткам. Для смеси ANFIS,
+гистограммного бустинга и CatBoost веса перебираются с шагом 0,1 по тем же
+валидационным фолдам. Рейтинги вариантов, метрики и графики находятся в
+`data/processed/tuning/`.
+
+Гистограммный бустинг с признаками автомобиля и региона получил
+109 998 ₽ MAE на фолдах и 118 359 ₽ на тесте. Первичный подбор CatBoost дал
+116 657 ₽ на фолдах и 116 249 ₽ на тесте. Дополнительная настройка CatBoost
+снизила MAE на фолдах до 109 896 ₽, а на тесте ошибка выросла до 135 355 ₽.
+Смесь получила 107 232 ₽ на фолдах и 123 857 ₽ на тесте. Подбор её весов
+оставил по 0,5 гистограммному бустингу и CatBoost.
+
+В дополнительных опытах взвешенная оценка по ближайшим соседям дала
+147 068 ₽ MAE на тесте. Аддитивная модель со сплайнами и регрессией Хьюбера
+дала 120 251 ₽ после повторной проверки с увеличенным бюджетом оптимизации.
+Их результаты сохранены в `neighbors_trials.csv` и `spline_metrics.csv`
+в каталоге подбора.
+
 ## Оценка цены из терминала
 
 ```powershell
 uv run --extra gpu python main.py
 ```
 
-Введите возраст Kia Rio в годах, пробег в километрах и мощность двигателя
-в лошадиных силах. Точка входа загружает готовую ANFIS + GA, рассчитывает
-прогноз на CPU и показывает три правила с наибольшим весом.
+Точка входа загружает наиболее полный сохранённый вариант ANFIS + GA,
+запрашивает его входные признаки, рассчитывает прогноз на CPU и показывает
+три правила с наибольшим весом. Для модели с 32 правилами вводятся год
+выпуска, пробег в километрах, мощность в лошадиных силах, тип коробки и
+поколение Kia Rio. Если поколение неизвестно, нажмите Enter. Тогда
+используется медианное поколение из обучающих данных.

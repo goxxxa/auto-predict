@@ -12,14 +12,23 @@ CONSEQUENT_PENALTY = 0.001
 MIN_MEMBERSHIP_WIDTH = 0.05
 
 
-class ANFIS(nn.Module):
-    """Two Gaussian membership functions per feature and a rule per combination."""
+def weight_observations(
+    design: Tensor, target: Tensor, weights: Tensor | None
+) -> tuple[Tensor, Tensor]:
+    if weights is None:
+        return design, target
+    scale = (weights / weights.mean()).sqrt()
+    return design * scale[:, None], target * scale
 
-    def __init__(self, n_features: int) -> None:
+
+class ANFIS(nn.Module):
+    """Gaussian membership functions per feature and a rule per combination."""
+
+    def __init__(self, n_features: int, terms: int = 2) -> None:
         super().__init__()
-        self.centers = nn.Parameter(torch.zeros(n_features, 2))
-        self.log_widths = nn.Parameter(torch.zeros(n_features, 2))
-        rules = torch.tensor(list(product(range(2), repeat=n_features)))
+        self.centers = nn.Parameter(torch.zeros(n_features, terms))
+        self.log_widths = nn.Parameter(torch.zeros(n_features, terms))
+        rules = torch.tensor(list(product(range(terms), repeat=n_features)))
         self.register_buffer("rule_terms", rules)
         self.register_buffer("feature_indices", torch.arange(n_features))
         self.register_buffer("consequents", torch.zeros(len(rules) * (n_features + 1)))
@@ -58,12 +67,20 @@ class ANFIS(nn.Module):
         return weighted_terms.reshape(len(features), len(self.rule_terms), -1).sum(dim=-1)
 
     @torch.no_grad()
-    def fit_consequents(self, features: Tensor, target: Tensor) -> None:
+    def fit_consequents(
+        self,
+        features: Tensor,
+        target: Tensor,
+        *,
+        penalty: float = CONSEQUENT_PENALTY,
+        weights: Tensor | None = None,
+    ) -> None:
         design = self.design_matrix(features)
+        design, target = weight_observations(design, target, weights)
         n_coefficients = design.shape[1]
         # Ridge rows keep the system full-rank even when some rules rarely fire.
         ridge_rows = torch.eye(n_coefficients, device=design.device, dtype=design.dtype)
-        ridge_rows *= sqrt(CONSEQUENT_PENALTY * len(features))
+        ridge_rows *= sqrt(penalty * len(features))
         design = torch.cat((design, ridge_rows))
         target = torch.cat((target, target.new_zeros(n_coefficients)))
         self.consequents.copy_(torch.linalg.lstsq(design, target, driver="gels").solution)

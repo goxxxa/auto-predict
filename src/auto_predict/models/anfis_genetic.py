@@ -3,7 +3,7 @@
 import torch
 from torch import Tensor
 
-from auto_predict.models.anfis import ANFIS, CONSEQUENT_PENALTY
+from auto_predict.models.anfis import ANFIS, CONSEQUENT_PENALTY, weight_observations
 
 
 def _fitness(
@@ -11,13 +11,18 @@ def _fitness(
     population: Tensor,
     train: tuple[Tensor, Tensor],
     validation: tuple[Tensor, Tensor],
+    *,
+    penalty: float = CONSEQUENT_PENALTY,
+    log_target: bool = False,
+    weights: Tensor | None = None,
 ) -> Tensor:
     centers, log_widths = population.unbind(dim=1)
     features, target = train
     design = model.design_matrix(features, centers=centers, log_widths=log_widths)
+    design, target = weight_observations(design, target, weights)
     transpose = design.transpose(-2, -1)
     gram = (transpose @ design) / len(target)
-    gram.diagonal(dim1=-2, dim2=-1).add_(CONSEQUENT_PENALTY)
+    gram.diagonal(dim1=-2, dim2=-1).add_(penalty)
     rhs = (transpose @ target).unsqueeze(-1) / len(target)
     coefficients = torch.linalg.solve(gram, rhs)
     del transpose, design
@@ -25,6 +30,8 @@ def _fitness(
     val_features, val_target = validation
     val_design = model.design_matrix(val_features, centers=centers, log_widths=log_widths)
     predictions = (val_design @ coefficients).squeeze(-1)
+    if log_target:
+        predictions = predictions.exp()
     return (predictions - val_target).abs().mean(dim=1)
 
 
@@ -44,15 +51,25 @@ def search_memberships(
     population_size: int,
     generations: int,
     seed: int,
+    *,
+    penalty: float = CONSEQUENT_PENALTY,
+    log_target: bool = False,
+    weights: Tensor | None = None,
+    mutation_scale: float = 0.3,
 ) -> tuple[Tensor, list[float]]:
     """Return the best chromosome and the best validation MAE by generation."""
     if population_size < 4 or generations < 1:
         raise ValueError("The search requires at least four candidates and one generation.")
+    if penalty <= 0 or mutation_scale <= 0:
+        raise ValueError("The consequent penalty and mutation scale must be positive.")
 
-    features = train[0]
+    features, target = train
+    if log_target:
+        train = features, target.log()
     device = features.device
     generator = torch.Generator(device=device).manual_seed(seed)
-    quartiles = torch.quantile(features, features.new_tensor([0.25, 0.75]), dim=0).T
+    quantiles = torch.linspace(0.25, 0.75, model.centers.shape[1], device=device)
+    quartiles = torch.quantile(features, quantiles, dim=0).T
     initial = torch.stack((quartiles, torch.zeros_like(quartiles)))
     noise = torch.randn((population_size, *initial.shape), device=device, generator=generator)
     population = initial + 0.5 * noise
@@ -61,7 +78,10 @@ def search_memberships(
 
     history = []
     for generation in range(generations):
-        scores = _fitness(model, population, train, validation)
+        scores = _fitness(
+            model, population, train, validation,
+            penalty=penalty, log_target=log_target, weights=weights,
+        )
         elites = scores.topk(2, largest=False).indices
         history.append(scores[elites[0]].item())
         if generation == generations - 1:
@@ -76,7 +96,7 @@ def search_memberships(
         mix = torch.rand(first.shape, device=device, generator=generator)
         children = first.lerp(second, mix)
         mutate = torch.rand(children.shape, device=device, generator=generator) < 0.25
-        mutation = torch.randn(children.shape, device=device, generator=generator) * 0.3
+        mutation = torch.randn(children.shape, device=device, generator=generator) * mutation_scale
         children += mutate * mutation
         population = torch.cat((population[elites], _ordered_population(children)))
 
